@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 宝可梦对战 · 回放</title>
+<style>
+	:root {
+		--bg: #060910;
+		--panel: rgba(255, 255, 255, 0.045);
+		--panel-strong: rgba(255, 255, 255, 0.08);
+		--line: rgba(255, 255, 255, 0.09);
+		--text: #e8eefc;
+		--muted: #8a96ad;
+		--p1: #ff6b6b;
+		--p2: #58a6ff;
+		--hp-high: #46d17f;
+		--hp-mid: #f0c24b;
+		--hp-low: #ef5350;
+		--radius: 14px;
+	}
+	* { box-sizing: border-box; }
+	html, body { height: 100%; }
+	body {
+		margin: 0;
+		background:
+			radial-gradient(1200px 600px at 50% -10%, #16233d 0%, transparent 60%),
+			radial-gradient(900px 500px at 10% 110%, #201427 0%, transparent 55%),
+			radial-gradient(900px 500px at 90% 110%, #0e2230 0%, transparent 55%),
+			var(--bg);
+		color: var(--text);
+		font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+		min-height: 100%;
+	}
+	body::before {
+		content: "";
+		position: fixed;
+		inset: 0;
+		background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+			linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+		background-size: 48px 48px;
+		mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 75%);
+		pointer-events: none;
+	}
+	.stage {
+		position: relative;
+		max-width: 1180px;
+		margin: 0 auto;
+		padding: 18px 20px 28px;
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		min-height: 100vh;
+	}
+	.topbar {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		padding: 12px 16px;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+		backdrop-filter: blur(8px);
+	}
+	.brand { font-size: 17px; font-weight: 700; letter-spacing: 0.4px; display: flex; align-items: baseline; gap: 10px; }
+	.brand .fmt { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+	.topbar .spacer { flex: 1; }
+	.turn-box { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+	.turn-box .label { font-size: 12px; color: var(--muted); }
+	.turn-box .value { font-size: 24px; font-weight: 700; }
+	.weather { font-size: 12px; color: #bcd0ee; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; min-height: 26px; display: flex; align-items: center; }
+	.weather:empty { display: none; }
+
+	.arena {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(220px, 0.92fr) minmax(0, 1fr);
+		gap: 14px;
+		align-items: stretch;
+		position: relative;
+	}
+	.fx-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: visible; }
+	.fx-particle {
+		position: absolute;
+		width: 9px; height: 9px;
+		border-radius: 50%;
+		transform: translate(-50%, -50%);
+		animation: fx-fly 0.55s ease-out forwards;
+	}
+	.fx-particle.shard { border-radius: 2px; }
+	@keyframes fx-fly {
+		0% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+		100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2) rotate(140deg); }
+	}
+	.fx-ring {
+		position: absolute;
+		width: 26px; height: 26px;
+		border: 2px solid currentColor;
+		border-radius: 50%;
+		transform: translate(-50%, -50%);
+		animation: fx-ring 0.45s ease-out forwards;
+	}
+	@keyframes fx-ring {
+		0% { opacity: 0.95; transform: translate(-50%, -50%) scale(0.4); }
+		100% { opacity: 0; transform: translate(-50%, -50%) scale(3.2); }
+	}
+	.fx-projectile {
+		position: absolute;
+		width: 30px; height: 30px;
+		border-radius: 50%;
+		transform: translate(-50%, -50%);
+		filter: blur(0.4px);
+		animation: fx-shot 0.36s ease-in forwards;
+	}
+	@keyframes fx-shot {
+		0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+		15% { opacity: 1; }
+		100% { opacity: 0.95; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3); }
+	}
+	.fx-text {
+		position: absolute;
+		transform: translate(-50%, -50%);
+		font-weight: 800;
+		font-size: 17px;
+		white-space: nowrap;
+		text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+		animation: fx-float 0.85s ease-out forwards;
+	}
+	.fx-text.small { font-size: 13px; }
+	@keyframes fx-float {
+		0% { opacity: 0; transform: translate(-50%, -20%) scale(0.8); }
+		20% { opacity: 1; }
+		100% { opacity: 0; transform: translate(-50%, -150%) scale(1.05); }
+	}
+	.sprite-wrap.dodge { animation: fx-dodge 0.42s ease; }
+	@keyframes fx-dodge {
+		0% { transform: translateX(0); }
+		28% { transform: translateX(38px); }
+		58% { transform: translateX(-16px); }
+		100% { transform: translateX(0); }
+	}
+	.sprite-wrap.faint { transition: opacity 0.55s ease, transform 0.55s ease, filter 0.55s ease; opacity: 0.15; transform: translateY(26px) rotate(10deg); filter: grayscale(1); }
+	.stage.shake { animation: fx-shake 0.3s ease; }
+	@keyframes fx-shake {
+		0%, 100% { transform: translate(0, 0); }
+		25% { transform: translate(4px, -3px); }
+		55% { transform: translate(-4px, 2px); }
+		80% { transform: translate(2px, 1px); }
+	}
+	.arena.flash::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: 7;
+		background: rgba(255, 255, 255, 0.35);
+		pointer-events: none;
+		animation: fx-flash 0.32s ease-out forwards;
+	}
+	@keyframes fx-flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+	.stage.wx-rain { background: linear-gradient(180deg, rgba(60, 120, 255, 0.12), transparent 60%); }
+	.stage.wx-sun { background: linear-gradient(180deg, rgba(255, 170, 60, 0.13), transparent 60%); }
+	.stage.wx-sand { background: linear-gradient(180deg, rgba(200, 160, 90, 0.13), transparent 60%); }
+	.stage.wx-snow { background: linear-gradient(180deg, rgba(180, 230, 255, 0.12), transparent 60%); }
+	.side {
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--panel);
+		padding: 14px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		position: relative;
+		overflow: hidden;
+	}
+	.side::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background: radial-gradient(400px 160px at 50% 0%, var(--tint, transparent), transparent 70%);
+		opacity: 0.35;
+		pointer-events: none;
+	}
+	.side.p1 { --tint: rgba(255, 107, 107, 0.28); }
+	.side.p2 { --tint: rgba(88, 166, 255, 0.28); }
+	.side-head { display: flex; align-items: center; gap: 8px; z-index: 1; }
+	.pname { font-weight: 700; font-size: 15px; }
+	.side.p1 .pname { color: var(--p1); }
+	.side.p2 .pname { color: var(--p2); }
+	.agent-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+	.active { display: flex; align-items: flex-end; gap: 12px; z-index: 1; min-height: 132px; }
+	.sprite-wrap { width: 132px; height: 132px; display: flex; align-items: flex-end; justify-content: center; position: relative; }
+	.sprite {
+		width: 128px; height: 128px;
+		object-fit: contain;
+		image-rendering: auto;
+		filter: drop-shadow(0 10px 16px rgba(0,0,0,0.55));
+		transition: transform 0.25s ease, opacity 0.25s ease;
+	}
+	.p2 .sprite { transform: scaleX(-1); }
+	.p2 .sprite.hit { transform: scaleX(-1) translateX(-8px); }
+	.sprite.hit { transform: translateX(8px); animation: shake 0.32s ease; }
+	@keyframes shake {
+		0%, 100% { filter: drop-shadow(0 10px 16px rgba(0,0,0,0.55)) brightness(1); }
+		30% { filter: drop-shadow(0 0 12px rgba(255,80,80,0.9)) brightness(1.6); }
+		60% { filter: drop-shadow(0 10px 16px rgba(0,0,0,0.55)) brightness(1); }
+	}
+	.sprite-missing {
+		width: 112px; height: 112px; border-radius: 50%;
+		border: 1px dashed var(--line);
+		display: flex; align-items: center; justify-content: center;
+		color: var(--muted); font-size: 34px; font-weight: 700;
+	}
+	.active-info { flex: 1; display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; }
+	.mon-line { display: flex; align-items: baseline; gap: 8px; }
+	.mon-name { font-size: 16px; font-weight: 600; }
+	.mon-lv { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+	.types { display: flex; gap: 4px; flex-wrap: wrap; }
+	.type-chip { font-size: 10px; line-height: 16px; padding: 0 7px; border-radius: 5px; color: #0b1220; font-weight: 700; letter-spacing: 0.5px; }
+	.status-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: rgba(239,83,80,0.18); color: #ff9b8f; border: 1px solid rgba(239,83,80,0.35); }
+	.hpbar { height: 9px; border-radius: 999px; background: rgba(255,255,255,0.09); overflow: hidden; }
+	.hpfill { height: 100%; width: 100%; border-radius: 999px; background: var(--hp-high); transition: width 0.55s cubic-bezier(.22,.61,.36,1), background-color 0.3s; }
+	.hpnum { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; gap: 8px; }
+	.team { display: flex; gap: 6px; flex-wrap: wrap; z-index: 1; }
+	.slot { width: 40px; display: flex; flex-direction: column; gap: 3px; align-items: center; opacity: 0.55; transition: opacity 0.25s; }
+	.slot img { width: 36px; height: 36px; object-fit: contain; filter: grayscale(0.2); }
+	.slot .mini-hp { width: 100%; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.1); overflow: hidden; }
+	.slot .mini-hp i { display: block; height: 100%; width: 100%; background: var(--hp-high); transition: width 0.5s ease; }
+	.slot.active { opacity: 1; }
+	.slot.active img { filter: drop-shadow(0 0 6px rgba(255,255,255,0.5)); }
+	.slot.fainted { opacity: 0.22; }
+	.slot.fainted img { filter: grayscale(1); }
+
+	.center { display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+	.vs { text-align: center; font-size: 12px; letter-spacing: 6px; color: var(--muted); }
+	.commentary {
+		flex: 1;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+		padding: 14px;
+		font-size: 14px;
+		line-height: 1.6;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		min-height: 160px;
+		max-height: 260px;
+		overflow: auto;
+	}
+	.commentary .line { color: #cfdcf3; }
+	.commentary .line.hot { color: #ffd166; }
+	.commentary .line.dim { color: var(--muted); font-size: 12px; }
+	.commentary .line.speaker { font-size: 12px; letter-spacing: 0.4px; color: var(--muted); }
+	.commentary .line.speaker.p1 { color: var(--p1); }
+	.commentary .line.speaker.p2 { color: var(--p2); }
+	.commentary .line.said { font-size: 15px; line-height: 1.7; color: #e6eefc; }
+	.commentary .empty { color: var(--muted); font-size: 12px; }
+
+	.controls {
+		display: flex; align-items: center; gap: 10px;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--panel);
+		padding: 10px 14px;
+	}
+	.controls button {
+		background: var(--panel-strong);
+		border: 1px solid var(--line);
+		color: var(--text);
+		border-radius: 9px;
+		height: 34px;
+		min-width: 40px;
+		cursor: pointer;
+		font-size: 14px;
+		transition: background 0.15s, transform 0.1s;
+	}
+	.controls button:hover { background: rgba(255,255,255,0.14); }
+	.controls button:active { transform: scale(0.96); }
+	.controls button.primary { background: rgba(88,166,255,0.22); border-color: rgba(88,166,255,0.4); }
+	input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); outline: none; }
+	input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #cfe3ff; border: none; cursor: pointer; }
+	.progress { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 62px; text-align: right; }
+	select { background: var(--panel-strong); color: var(--text); border: 1px solid var(--line); border-radius: 9px; height: 34px; padding: 0 8px; }
+
+	.bottom { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; flex: 1; min-height: 180px; }
+	.log {
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--panel);
+		padding: 12px 14px;
+		overflow: auto;
+		font-size: 13px;
+		line-height: 1.72;
+		max-height: 320px;
+	}
+	.entry { display: flex; gap: 8px; padding: 1px 0; animation: fadein 0.25s ease; }
+	.entry .who { flex: 0 0 auto; font-size: 10px; padding: 2px 6px; border-radius: 4px; height: 18px; line-height: 14px; margin-top: 2px; color: var(--muted); background: rgba(255,255,255,0.06); }
+	.entry.p1 .who { color: var(--p1); }
+	.entry.p2 .who { color: var(--p2); }
+	.entry.damage { color: #ff9d9d; }
+	.entry.heal { color: #7fe3a8; }
+	.entry.crit { color: #ffd166; font-weight: 600; }
+	.entry.faint { color: #ff5d5d; font-weight: 700; }
+	.entry.buff { color: #9be3ff; }
+	.entry.debuff { color: #d7a3ff; }
+	.entry.system { color: #9fb6dd; }
+	.entry.switch { color: #c9d8f2; }
+	.entry.win { color: #ffd166; font-weight: 700; font-size: 15px; }
+	@keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+	.decisions {
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--panel);
+		padding: 12px 14px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		overflow: auto;
+		max-height: 320px;
+	}
+	.decisions h3 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 1px; }
+	.decision { border-left: 2px solid var(--line); padding: 2px 0 2px 10px; font-size: 13px; }
+	.decision.p1 { border-color: var(--p1); }
+	.decision.p2 { border-color: var(--p2); }
+	.decision .dlabel { font-weight: 600; }
+	.decision .dreason { color: var(--muted); font-size: 11.5px; }
+	.decision .dthought { margin-top: 4px; color: #b9c8e2; font-size: 12px; line-height: 1.6; border-left: 2px solid rgba(255,255,255,0.14); padding-left: 8px; }
+	.decision .dtag { margin-top: 3px; font-size: 10.5px; color: #ffb86b; }
+	.decision .dfallback { color: #ffb86b; font-size: 11px; }
+	.hidden { display: none !important; }
+
+	.draft-layer {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 18px;
+		background: rgba(4, 7, 13, 0.88);
+		backdrop-filter: blur(10px);
+	}
+	.draft-panel {
+		width: min(1120px, 97vw);
+		max-height: 94vh;
+		overflow: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		padding: 16px;
+		border: 1px solid var(--line);
+		border-radius: 18px;
+		background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+	}
+	.draft-top { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; }
+	.draft-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+	.draft-side.p2 { align-items: flex-end; }
+	.draft-side .dn { font-weight: 700; font-size: 15px; }
+	.draft-side.p1 .dn { color: var(--p1); }
+	.draft-side.p2 .dn { color: var(--p2); }
+	.draft-picks { display: flex; gap: 6px; flex-wrap: wrap; }
+	.draft-picks .pslot {
+		width: 42px; height: 42px;
+		border: 1px dashed var(--line);
+		border-radius: 9px;
+		display: flex; align-items: center; justify-content: center;
+		font-size: 10px; color: var(--muted);
+	}
+	.draft-picks .pslot img { width: 38px; height: 38px; object-fit: contain; animation: fadein 0.3s ease; }
+	.draft-label { text-align: center; align-self: center; }
+	.dl-title { font-size: 11px; letter-spacing: 5px; color: var(--muted); }
+	.dl-step { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.pool { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+	.pcard {
+		position: relative;
+		display: flex; flex-direction: column; align-items: center; gap: 3px;
+		padding: 8px 6px 6px;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: var(--panel);
+		transition: transform 0.2s, opacity 0.2s, border-color 0.2s, box-shadow 0.2s;
+	}
+	.pcard img { width: 56px; height: 56px; object-fit: contain; }
+	.pc-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+	.pc-types { display: flex; gap: 3px; }
+	.pc-types span { font-size: 9px; line-height: 14px; padding: 0 5px; border-radius: 4px; color: #0b1220; font-weight: 700; }
+	.pc-sub { font-size: 10px; color: var(--muted); }
+	.pc-mark {
+		position: absolute; top: 6px; right: 6px;
+		font-size: 10px; line-height: 16px; padding: 0 5px; border-radius: 4px;
+		color: #fff; font-weight: 700;
+	}
+	.pcard.current { transform: translateY(-3px) scale(1.05); box-shadow: 0 0 0 2px rgba(255,255,255,0.4), 0 10px 24px rgba(0,0,0,0.45); z-index: 2; }
+	.pcard.banned { opacity: 0.28; filter: grayscale(1); }
+	.pcard.banned .pc-mark { background: rgba(239,83,80,0.9); }
+	.pcard.picked-p1 { border-color: rgba(255,107,107,0.7); box-shadow: inset 0 0 0 1px rgba(255,107,107,0.45); }
+	.pcard.picked-p1 .pc-mark { background: rgba(255,107,107,0.9); }
+	.pcard.picked-p2 { border-color: rgba(88,166,255,0.7); box-shadow: inset 0 0 0 1px rgba(88,166,255,0.45); }
+	.pcard.picked-p2 .pc-mark { background: rgba(88,166,255,0.9); }
+	.draft-bottom { display: flex; gap: 16px; align-items: flex-end; border-top: 1px solid var(--line); padding-top: 12px; }
+	.draft-comment { flex: 1; min-height: 76px; display: flex; flex-direction: column; gap: 4px; }
+	.dc-title { font-weight: 700; font-size: 14px; }
+	.dc-reason { font-size: 12px; color: #ffd166; }
+	.dc-thought { font-size: 13px; line-height: 1.65; color: #cfdcf3; }
+	.draft-actions { display: flex; gap: 8px; flex-shrink: 0; }
+	.draft-actions button {
+		height: 36px; padding: 0 14px;
+		border-radius: 9px;
+		border: 1px solid var(--line);
+		background: var(--panel-strong);
+		color: var(--text);
+		cursor: pointer;
+		font-size: 13px;
+	}
+	.draft-actions button.primary { background: rgba(88,166,255,0.24); border-color: rgba(88,166,255,0.45); }
+	.draft-actions button:disabled { opacity: 0.45; cursor: default; }
+
+	.start-gate {
+		position: fixed;
+		inset: 0;
+		z-index: 70;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(4, 7, 13, 0.92);
+		backdrop-filter: blur(12px);
+	}
+	.sg-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+		padding: 30px 36px;
+		border: 1px solid var(--line);
+		border-radius: 18px;
+		background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+		text-align: center;
+	}
+	.sg-title { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+	.sg-sub { font-size: 12px; color: var(--muted); }
+	.sg-buttons { display: flex; gap: 10px; margin-top: 4px; }
+	.sg-buttons button {
+		height: 40px;
+		padding: 0 18px;
+		border-radius: 10px;
+		border: 1px solid var(--line);
+		background: var(--panel-strong);
+		color: var(--text);
+		cursor: pointer;
+		font-size: 14px;
+	}
+	.sg-buttons button.primary { background: rgba(88,166,255,0.26); border-color: rgba(88,166,255,0.5); }
+	.controls button.off { opacity: 0.5; }
+
+	@media (max-width: 900px) {
+		.arena { grid-template-columns: 1fr; }
+		.vs { display: none; }
+		.commentary { max-height: none; }
+		.bottom { grid-template-columns: 1fr; }
+		.topbar { flex-wrap: wrap; }
+		.pool { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	}
+</style>
+</head>
+<body>
+<div class="stage">
+	<div class="draft-layer hidden" id="draft-layer">
+		<div class="draft-panel">
+			<div class="draft-top">
+				<div class="draft-side p1">
+					<span class="dn" id="draft-name-p1"></span>
+					<div class="draft-picks" id="draft-picks-p1"></div>
+				</div>
+				<div class="draft-label">
+					<div class="dl-title">BAN / PICK</div>
+					<div class="dl-step" id="draft-step">0 / 0</div>
+				</div>
+				<div class="draft-side p2">
+					<span class="dn" id="draft-name-p2"></span>
+					<div class="draft-picks" id="draft-picks-p2"></div>
+				</div>
+			</div>
+			<div class="pool" id="draft-pool"></div>
+			<div class="draft-bottom">
+				<div class="draft-comment" id="draft-comment">
+					<div class="dc-title">准备开始 BP…</div>
+				</div>
+				<div class="draft-actions">
+					<button id="draft-skip">跳过</button>
+					<button id="draft-go" class="primary" disabled>进入对战 ▶</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="start-gate hidden" id="start-gate">
+		<div class="sg-card">
+			<div class="sg-title">AI 宝可梦对战</div>
+			<div class="sg-sub">带语音解说 · 双方会用不同音色读出自己的判断</div>
+			<div class="sg-buttons">
+				<button id="start-voice" class="primary">开始观战（带语音）</button>
+				<button id="start-mute">静音观看</button>
+			</div>
+		</div>
+	</div>
+	<header class="topbar">
+		<div class="brand"><span>AI 宝可梦对战</span><span class="fmt" id="format"></span></div>
+		<div class="spacer"></div>
+		<div class="weather" id="weather"></div>
+		<div class="turn-box"><span class="label">回合</span><span class="value" id="turn-value">0</span></div>
+	</header>
+
+	<main class="arena">
+		<section class="side p1" id="side-p1"></section>
+		<div class="center">
+			<div class="vs">VS</div>
+			<div class="commentary" id="commentary"><div class="empty">加载中…</div></div>
+		</div>
+		<section class="side p2" id="side-p2"></section>
+		<div class="fx-layer" id="fx-layer"></div>
+	</main>
+
+	<section class="controls">
+		<button id="prev" title="上一回合">◀</button>
+		<button id="play" class="primary" title="播放/暂停">▶</button>
+		<button id="next" title="下一回合">▶|</button>
+		<input id="scrub" type="range" min="0" max="0" value="0">
+		<span class="progress" id="progress">0 / 0</span>
+		<button id="mute" title="配音开关">语音</button>
+		<button id="music" title="背景音乐开关">音乐开</button>
+		<select id="speed">
+			<option value="1.6">慢</option>
+			<option value="1" selected>正常</option>
+			<option value="0.55">快</option>
+		</select>
+	</section>
+
+	<section class="bottom">
+		<div class="log" id="log"></div>
+		<aside class="decisions" id="decisions"><h3>本回合决策</h3><div class="decision"><div class="dreason">等待开局…</div></div></aside>
+	</section>
+</div>
+
+<script>/*__REPLAY_DATA__*/</script>
+<script>
+(() => {
+	const replay = window.__REPLAY__;
+	const beats = replay.beats || [];
+	const players = replay.meta.players;
+	const STATUS_ZH = { brn: '灼', par: '麻', slp: '睡', psn: '毒', tox: '剧', frz: '冻' };
+	const BOOST_ZH = { atk: '攻', def: '防', spa: '特攻', spd: '特防', spe: '速', accuracy: '命中', evasion: '闪避' };
+	const TYPE_ZH = { Normal: '一般', Fire: '火', Water: '水', Grass: '草', Electric: '电', Ice: '冰', Fighting: '格斗', Poison: '毒', Ground: '地面', Flying: '飞行', Psychic: '超能', Bug: '虫', Rock: '岩石', Ghost: '幽灵', Dragon: '龙', Dark: '恶', Steel: '钢', Fairy: '妖精', Stellar: '星晶', '???': '未知' };
+	const TYPE_COLOR = { Normal: '#c6c6a8', Fire: '#f08030', Water: '#6890f0', Grass: '#78c850', Electric: '#f8d030', Ice: '#98d8d8', Fighting: '#c03028', Poison: '#a040a0', Ground: '#e0c068', Flying: '#a890f0', Psychic: '#f85888', Bug: '#a8b820', Rock: '#b8a038', Ghost: '#705898', Dragon: '#7038f8', Dark: '#705848', Steel: '#b8b8d0', Fairy: '#ee99ac', Stellar: '#5fd3d3', '???': '#68a090' };
+	const sideEls = {
+		p1: document.getElementById('side-p1'),
+		p2: document.getElementById('side-p2'),
+	};
+	const arenaEl = document.querySelector('.arena');
+	const stageEl = document.querySelector('.stage');
+	const fxLayer = document.getElementById('fx-layer');
+	const STATUS_FULL = { brn: '灼伤', par: '麻痹', slp: '睡眠', psn: '中毒', tox: '剧毒', frz: '冰冻' };
+	const els = {
+		format: document.getElementById('format'),
+		weather: document.getElementById('weather'),
+		turn: document.getElementById('turn-value'),
+		commentary: document.getElementById('commentary'),
+		log: document.getElementById('log'),
+		decisions: document.getElementById('decisions'),
+		scrub: document.getElementById('scrub'),
+		progress: document.getElementById('progress'),
+		play: document.getElementById('play'),
+		mute: document.getElementById('mute'),
+		music: document.getElementById('music'),
+	};
+
+	let index = -1;
+	let playing = false;
+	let token = 0;
+	let speed = 1;
+	let renderedBeat = -1;
+	const ANIMATED = replay.meta.animatedSprites || {};
+	const SPRITE_ANI = id => `https://play.pokemonshowdown.com/sprites/gen5ani/${id}.gif`;
+	const SPRITE_ICON = id => `https://play.pokemonshowdown.com/sprites/gen5/${id}.png`;
+	const spriteSrc = mon => (ANIMATED[mon.sprite] === false ? SPRITE_ICON(mon.sprite) : SPRITE_ANI(mon.sprite));
+
+	els.format.textContent = replay.meta.formatName || '';
+	els.scrub.max = String(Math.max(0, beats.length - 1));
+
+	function sideTitle(player) {
+		return `<div class="side-head"><span class="pname">${escapeHtml(player.name)}</span><span class="agent-tag">${escapeHtml(player.agentLabel || player.agent)}</span></div>`;
+	}
+
+	function buildSide(id) {
+		const player = players.find(p => p.id === id);
+		sideEls[id].innerHTML = `
+			${sideTitle(player)}
+			<div class="active">
+				<div class="sprite-wrap" data-role="sprite-wrap"></div>
+				<div class="active-info">
+					<div class="mon-line">
+						<span class="mon-name" data-role="name">—</span>
+						<span class="mon-lv" data-role="lv"></span>
+						<span class="status-badge hidden" data-role="status"></span>
+					</div>
+					<div class="types" data-role="types"></div>
+					<div class="hpbar"><div class="hpfill" data-role="hp"></div></div>
+					<div class="hpnum"><span data-role="hpnum"></span><span data-role="boost"></span></div>
+				</div>
+			</div>
+			<div class="team" data-role="team"></div>
+		`;
+	}
+
+	function buildSprite(id, mon) {
+		const wrap = sideEls[id].querySelector('[data-role="sprite-wrap"]');
+		wrap.classList.remove('faint', 'dodge');
+		if (!mon) {
+			wrap.replaceChildren();
+			const placeholder = document.createElement('div');
+			placeholder.className = 'sprite-missing';
+			placeholder.textContent = '?';
+			wrap.appendChild(placeholder);
+			return;
+		}
+		const img = document.createElement('img');
+		img.className = 'sprite';
+		img.alt = mon.name;
+		img.dataset.sprite = mon.sprite;
+		// 新立绘加载完成前保留旧图，避免换人瞬间出现空帧
+		img.onload = () => wrap.replaceChildren(img);
+		// 没有动图的新世代宝可梦退回静态立绘
+		img.onerror = () => {
+			if (!img.dataset.staticTried) {
+				img.dataset.staticTried = '1';
+				img.src = SPRITE_ICON(mon.sprite);
+			} else {
+				wrap.replaceChildren(fallbackSprite(mon));
+			}
+		};
+		img.src = spriteSrc(mon);
+	}
+
+	function fallbackSprite(mon) {
+		const div = document.createElement('div');
+		div.className = 'sprite-missing';
+		div.textContent = (mon.name || '?').slice(0, 1);
+		return div;
+	}
+
+	function hpColor(ratio) {
+		if (ratio > 0.5) return 'var(--hp-high)';
+		if (ratio > 0.2) return 'var(--hp-mid)';
+		return 'var(--hp-low)';
+	}
+
+	function applyState(state) {
+		if (!state) return;
+		els.weather.textContent = state.weather ? weatherLabel(state.weather) : '';
+		for (const side of state.sides) {
+			const root = sideEls[side.id];
+			if (!root) continue;
+			const active = side.active && side.active[0];
+			const nameEl = root.querySelector('[data-role="name"]');
+			const lvEl = root.querySelector('[data-role="lv"]');
+			const hpEl = root.querySelector('[data-role="hp"]');
+			const hpNum = root.querySelector('[data-role="hpnum"]');
+			const statusEl = root.querySelector('[data-role="status"]');
+			const boostEl = root.querySelector('[data-role="boost"]');
+			const typesEl = root.querySelector('[data-role="types"]');
+			const wrap = root.querySelector('[data-role="sprite-wrap"]');
+
+			if (!active) {
+				nameEl.textContent = '—';
+				lvEl.textContent = '';
+				hpEl.style.width = '0%';
+				hpNum.textContent = '';
+				typesEl.innerHTML = '';
+				statusEl.classList.add('hidden');
+				boostEl.textContent = '';
+				buildSprite(side.id, null);
+			} else {
+				nameEl.textContent = active.name;
+				lvEl.textContent = `Lv.${active.level}`;
+				typesEl.innerHTML = (active.types || [])
+					.map(t => `<span class="type-chip" style="background:${TYPE_COLOR[t] || '#8a96ad'}">${TYPE_ZH[t] || t}</span>`)
+					.join('');
+				const ratio = active.maxhp ? active.hp / active.maxhp : 0;
+				hpEl.style.width = `${Math.max(0, ratio * 100)}%`;
+				hpEl.style.backgroundColor = hpColor(ratio);
+				hpNum.textContent = `${Math.max(0, active.hp)} / ${active.maxhp}`;
+				statusEl.textContent = STATUS_ZH[active.status] || '';
+				statusEl.classList.toggle('hidden', !active.status);
+				const boosts = active.boosts || {};
+				boostEl.textContent = Object.entries(boosts)
+					.filter(([, v]) => v)
+					.map(([k, v]) => `${BOOST_ZH[k] || k}${v > 0 ? '+' : ''}${v}`)
+					.join(' ');
+				const prev = wrap.querySelector('img');
+				const changed = !prev || prev.dataset.sprite !== active.sprite;
+				if (changed) buildSprite(side.id, active);
+			}
+
+			const teamEl = root.querySelector('[data-role="team"]');
+			if (teamEl.children.length !== side.team.length) {
+				teamEl.innerHTML = '';
+				for (const mon of side.team) {
+					const slot = document.createElement('div');
+					slot.className = 'slot';
+					const img = document.createElement('img');
+					img.dataset.sprite = mon.sprite;
+					img.alt = mon.name;
+					img.src = SPRITE_ICON(mon.sprite);
+					img.onerror = () => { img.style.visibility = 'hidden'; };
+					const bar = document.createElement('div');
+					bar.className = 'mini-hp';
+					bar.appendChild(document.createElement('i'));
+					slot.append(img, bar);
+					teamEl.appendChild(slot);
+				}
+			}
+			side.team.forEach((mon, slotIndex) => {
+				const slot = teamEl.children[slotIndex];
+				slot.classList.toggle('fainted', Boolean(mon.fainted));
+				slot.classList.toggle('active', Boolean(mon.active));
+				const img = slot.querySelector('img');
+				if (img.dataset.sprite !== mon.sprite) {
+					img.dataset.sprite = mon.sprite;
+					img.src = SPRITE_ICON(mon.sprite);
+				}
+				img.alt = mon.name;
+				img.title = `${mon.name} · ${Math.max(0, mon.hp)}/${mon.maxhp}`;
+				const fill = slot.querySelector('.mini-hp i');
+				const ratio = mon.maxhp ? mon.hp / mon.maxhp : 0;
+				fill.style.width = `${Math.max(0, ratio * 100)}%`;
+				fill.style.backgroundColor = mon.fainted ? 'transparent' : hpColor(ratio);
+			});
+		}
+	}
+
+	function weatherLabel(id) {
+		const map = { raindance: '下雨', primordialsea: '大雨', sandstorm: '沙暴', snowscape: '下雪', hail: '冰雹', sunnyday: '日照', desolateland: '强烈日照', deltastream: '乱流' };
+		return map[id] || id;
+	}
+
+	function entryRow(entry) {
+		const row = document.createElement('div');
+		row.className = `entry ${entry.kind || ''} ${entry.side || ''}`;
+		if (entry.side) {
+			const who = document.createElement('span');
+			who.className = 'who';
+			who.textContent = entry.side.toUpperCase();
+			row.appendChild(who);
+		}
+		const text = document.createElement('span');
+		text.textContent = entry.text;
+		row.appendChild(text);
+		return row;
+	}
+
+	function rebuildLogUpTo(i) {
+		els.log.innerHTML = '';
+		for (let k = 0; k <= i; k++) {
+			for (const entry of beats[k].entries || []) els.log.appendChild(entryRow(entry));
+		}
+		els.log.scrollTop = els.log.scrollHeight;
+		renderedBeat = i;
+	}
+
+	function showCommentary(beat) {
+		els.commentary.innerHTML = '';
+		const entries = beat.entries || [];
+		if (!entries.length) {
+			const empty = document.createElement('div');
+			empty.className = 'empty';
+			empty.textContent = beat.kind === 'lead' ? '双方登场，等待第一回合…' : '这一回合没有特别事件。';
+			els.commentary.appendChild(empty);
+			return;
+		}
+		const meaningful = entries.filter(e => e.kind !== 'system');
+		const picked = meaningful.length ? meaningful.slice(-4) : entries.slice(-3);
+		for (const entry of picked) {
+			const line = document.createElement('div');
+			line.className = `line ${['crit', 'faint', 'win'].includes(entry.kind) ? 'hot' : ''}`;
+			line.textContent = entry.text;
+			els.commentary.appendChild(line);
+		}
+	}
+
+	function decisionCard(d) {
+		const player = players.find(p => p.id === d.side);
+		const div = document.createElement('div');
+		div.className = `decision ${d.side}`;
+		div.innerHTML = `
+			<div class="dlabel">${escapeHtml(player ? player.name : d.side)} · ${escapeHtml(d.label)}</div>
+			${d.reason ? `<div class="dreason">${escapeHtml(d.reason)}</div>` : ''}
+			${d.thought ? `<div class="dthought">${escapeHtml(d.thought)}</div>` : ''}
+			${d.inconsistent ? '<div class="dtag">思考写到了换人，但本回合实际是出招（模型表述有误，动作以上方为准）</div>' : ''}
+			${d.fallback ? '<div class="dfallback">已降级为保底动作</div>' : ''}
+		`;
+		return div;
+	}
+
+	function showDecisions(beat) {
+		els.decisions.innerHTML = '<h3>本回合决策</h3>';
+		const decisions = beat.decisions || [];
+		if (!decisions.length) {
+			const div = document.createElement('div');
+			div.className = 'decision';
+			div.innerHTML = '<div class="dreason">没有需要决策的动作（或战斗已结束）</div>';
+			els.decisions.appendChild(div);
+			return;
+		}
+		for (const d of decisions) els.decisions.appendChild(decisionCard(d));
+	}
+
+	function idle(ms, myToken) {
+		return new Promise(resolve => setTimeout(() => resolve(myToken === token), ms));
+	}
+
+	async function presentForcedDecision(decision, myToken) {
+		const saved = els.commentary.innerHTML;
+		const speaker = players.find(p => p.id === decision.side);
+		const spoken = decision.speechText || decision.thought || decision.reason || '';
+		els.commentary.innerHTML = `
+			<div class="line speaker ${decision.side}">${escapeHtml(speaker ? speaker.name : decision.side)} · ${escapeHtml(decision.label)}（倒下后替补）</div>
+			<div class="line said">${escapeHtml(spoken)}</div>
+		`;
+		els.decisions.appendChild(decisionCard(decision));
+		if (decision.speech && !muted) {
+			await playAudio(decision.speech);
+		} else {
+			const ms = 900 + Math.min(2000, spoken.length * 55);
+			const ok = await idle(Math.round(ms * speed), myToken);
+			if (!ok) return false;
+		}
+		els.commentary.innerHTML = saved;
+		return idle(Math.round(320 * speed), myToken);
+	}
+
+	async function showBeat(i, myToken, { instant = false } = {}) {
+		const beat = beats[i];
+		const decisions = beat.decisions || [];
+		const preDecisions = decisions.filter(d => !d.forced);
+		const forcedQueue = decisions.filter(d => d.forced);
+		const fxState = { lastMove: {} };
+		let decisionsRendered = false;
+
+		if (beat.kind === 'result') setMusicScene('victory', { fanfare: !instant });
+		else setMusicScene('battle');
+
+		if (!instant && beat.kind === 'turn') {
+			// 第一段：思考。只播本回合主动选择的动作，倒下后的替补留到执行阶段
+			applyState(beat.before ?? beat.after);
+			els.turn.textContent = beat.turn ?? 0;
+			els.decisions.innerHTML = '<h3>本回合决策</h3>';
+			els.commentary.innerHTML = '';
+			for (const decision of preDecisions) {
+				if (myToken !== token) return false;
+				const speaker = players.find(p => p.id === decision.side);
+				const spoken = decision.speechText || decision.thought || decision.reason || '';
+				els.commentary.innerHTML = `
+					<div class="line speaker ${decision.side}">${escapeHtml(speaker ? speaker.name : decision.side)} · ${escapeHtml(decision.label)}</div>
+					<div class="line said">${escapeHtml(spoken)}</div>
+				`;
+				els.decisions.appendChild(decisionCard(decision));
+				if (decision.speech && !muted) {
+					await playAudio(decision.speech);
+				} else {
+					const ms = 900 + Math.min(2000, spoken.length * 55);
+					const ok = await idle(Math.round(ms * speed), myToken);
+					if (!ok) return false;
+				}
+				const gap = await idle(Math.round(260 * speed), myToken);
+				if (!gap) return false;
+			}
+			decisionsRendered = true;
+		}
+
+		// 第二段：执行。状态推进到回合结束，再逐条演战报
+		applyState(beat.after);
+		els.turn.textContent = beat.turn ?? (beat.kind === 'result' ? '终' : 0);
+		els.commentary.innerHTML = '';
+		if (!decisionsRendered) showDecisions(beat);
+
+		const entries = beat.entries || [];
+		if (instant || renderedBeat !== i - 1) {
+			rebuildLogUpTo(i);
+			showCommentary(beat);
+			for (const entry of entries) {
+				if (entry.kind === 'damage' || entry.kind === 'faint') flashSide(entry.side);
+			}
+		} else {
+			// 逐条滚动战报，给观众留出阅读时间
+			for (const entry of entries) {
+				els.log.appendChild(entryRow(entry));
+				els.log.scrollTop = els.log.scrollHeight;
+				if (entry.kind !== 'system') {
+					const line = document.createElement('div');
+					line.className = `line ${['crit', 'faint', 'win'].includes(entry.kind) ? 'hot' : ''}`;
+					line.textContent = entry.text;
+					els.commentary.appendChild(line);
+					while (els.commentary.children.length > 4) els.commentary.firstElementChild.remove();
+				}
+				if (entry.kind === 'damage' || entry.kind === 'faint') flashSide(entry.side);
+				renderedBeat = i;
+				runEntryFx(entry, fxState);
+				// 倒下之后再播报替补选择，符合真实对战顺序
+				if (entry.kind === 'faint' && forcedQueue.length) {
+					const pending = forcedQueue.findIndex(d => d.side === entry.side);
+					if (pending >= 0) {
+						const [forced] = forcedQueue.splice(pending, 1);
+						const ok = await presentForcedDecision(forced, myToken);
+						if (!ok) return false;
+					}
+				}
+				const ok = await idle(Math.round(420 * speed), myToken);
+				if (!ok) return false;
+			}
+			for (const forced of forcedQueue.splice(0)) {
+				const ok = await presentForcedDecision(forced, myToken);
+				if (!ok) return false;
+			}
+			renderedBeat = i;
+			showCommentary(beat);
+			const end = document.createElement('div');
+			end.className = 'line dim';
+			end.textContent = `— 回合 ${beat.turn} 结束 —`;
+			els.commentary.appendChild(end);
+		}
+		els.scrub.value = String(i);
+		els.progress.textContent = `${i + 1} / ${beats.length}`;
+		if (myToken !== token) return false;
+		return true;
+	}
+
+	function flashSide(side) {
+		if (!side) return;
+		const root = sideEls[side];
+		const img = root && root.querySelector('.sprite');
+		if (!img) return;
+		img.classList.add('hit');
+		setTimeout(() => img.classList.remove('hit'), 340);
+	}
+
+	// ---------- 属性特效层 ----------
+	function typeColor(type) {
+		return TYPE_COLOR[type] || '#cfe3ff';
+	}
+
+	function arenaPoint(sideId) {
+		const root = sideEls[sideId];
+		if (!root) return null;
+		const el = root.querySelector('.sprite') || root;
+		const rect = el.getBoundingClientRect();
+		const base = arenaEl.getBoundingClientRect();
+		return { x: rect.left - base.left + rect.width / 2, y: rect.top - base.top + rect.height / 2 };
+	}
+
+	function addFxNode(node, life) {
+		fxLayer.appendChild(node);
+		setTimeout(() => node.remove(), life);
+	}
+
+	function spawnBurst(point, color, { count = 12, spread = 78, shapes = ['dot', 'shard'] } = {}) {
+		if (!point) return;
+		for (let i = 0; i < count; i++) {
+			const angle = Math.random() * Math.PI * 2;
+			const dist = spread * (0.45 + Math.random() * 0.85);
+			const el = document.createElement('div');
+			el.className = `fx-particle ${shapes[i % shapes.length]}`;
+			el.style.left = `${point.x}px`;
+			el.style.top = `${point.y}px`;
+			el.style.background = color;
+			el.style.boxShadow = `0 0 10px ${color}`;
+			el.style.setProperty('--dx', `${Math.cos(angle) * dist}px`);
+			el.style.setProperty('--dy', `${Math.sin(angle) * dist}px`);
+			addFxNode(el, 620);
+		}
+	}
+
+	function spawnRing(point, color) {
+		if (!point) return;
+		const el = document.createElement('div');
+		el.className = 'fx-ring';
+		el.style.left = `${point.x}px`;
+		el.style.top = `${point.y}px`;
+		el.style.color = color;
+		addFxNode(el, 480);
+	}
+
+	function floatText(point, text, color, small = false) {
+		if (!point) return;
+		const el = document.createElement('div');
+		el.className = `fx-text${small ? ' small' : ''}`;
+		el.style.left = `${point.x}px`;
+		el.style.top = `${point.y - 48}px`;
+		el.style.color = color;
+		el.textContent = text;
+		addFxNode(el, 900);
+	}
+
+	function shootProjectile(from, to, color) {
+		if (!from || !to) return;
+		const el = document.createElement('div');
+		el.className = 'fx-projectile';
+		el.style.left = `${from.x}px`;
+		el.style.top = `${from.y}px`;
+		el.style.background = `radial-gradient(circle at 35% 35%, #fff, ${color} 45%, transparent 72%)`;
+		el.style.boxShadow = `0 0 22px ${color}`;
+		el.style.setProperty('--dx', `${to.x - from.x}px`);
+		el.style.setProperty('--dy', `${to.y - from.y}px`);
+		addFxNode(el, 380);
+	}
+
+	function shakeStage() {
+		stageEl.classList.remove('shake');
+		void stageEl.offsetWidth;
+		stageEl.classList.add('shake');
+		setTimeout(() => stageEl.classList.remove('shake'), 320);
+	}
+
+	function flashArena() {
+		arenaEl.classList.remove('flash');
+		void arenaEl.offsetWidth;
+		arenaEl.classList.add('flash');
+		setTimeout(() => arenaEl.classList.remove('flash'), 340);
+	}
+
+	function dodgeSide(sideId) {
+		const wrap = sideEls[sideId]?.querySelector('.sprite-wrap');
+		if (!wrap) return;
+		wrap.classList.remove('dodge');
+		void wrap.offsetWidth;
+		wrap.classList.add('dodge');
+		setTimeout(() => wrap.classList.remove('dodge'), 450);
+	}
+
+	function faintSide(sideId) {
+		const wrap = sideEls[sideId]?.querySelector('.sprite-wrap');
+		if (wrap) wrap.classList.add('faint');
+	}
+
+	function applyWeatherFx(weather) {
+		stageEl.classList.remove('wx-rain', 'wx-sun', 'wx-sand', 'wx-snow');
+		if (!weather) return;
+		if (/rain|sea/i.test(weather)) stageEl.classList.add('wx-rain');
+		else if (/sand/i.test(weather)) stageEl.classList.add('wx-sand');
+		else if (/snow|hail/i.test(weather)) stageEl.classList.add('wx-snow');
+		else if (/sun|desolate/i.test(weather)) stageEl.classList.add('wx-sun');
+	}
+
+	function runEntryFx(entry, fxState) {
+		const point = entry.side ? arenaPoint(entry.side) : null;
+		switch (entry.kind) {
+			case 'move': {
+				if (!entry.side) return;
+				fxState.lastMove[entry.side] = { type: entry.moveType, category: entry.moveCategory, targetSide: entry.targetSide };
+				const from = arenaPoint(entry.side);
+				const color = typeColor(entry.moveType);
+				spawnRing(from, color);
+				if (entry.moveCategory !== 'Status' && entry.targetSide) {
+					shootProjectile(from, arenaPoint(entry.targetSide), color);
+				}
+				return;
+			}
+			case 'damage': {
+				if (!entry.side) return;
+				const foeSide = entry.side === 'p1' ? 'p2' : 'p1';
+				const move = fxState.lastMove[foeSide] || fxState.lastMove[entry.side];
+				const color = move ? typeColor(move.type) : '#ff8a8a';
+				spawnBurst(point, color, { count: 14 });
+				spawnRing(point, color);
+				if (entry.delta) floatText(point, `-${entry.delta}`, '#ff9d9d', true);
+				shakeStage();
+				return;
+			}
+			case 'heal': {
+				spawnBurst(point, '#7fe3a8', { count: 8 });
+				if (entry.delta) floatText(point, `+${entry.delta}`, '#7fe3a8', true);
+				return;
+			}
+			case 'miss': {
+				const target = entry.targetSide;
+				dodgeSide(target);
+				floatText(arenaPoint(target), '落空', '#cfd8e8');
+				return;
+			}
+			case 'crit': {
+				flashArena();
+				floatText(point, '会心一击！', '#ffd166');
+				return;
+			}
+			case 'effect': {
+				if (entry.effect === 'super') floatText(point, '效果拔群！', '#ffd166');
+				else if (entry.effect === 'resist') floatText(point, '效果不佳…', '#9fb6dd', true);
+				else if (entry.effect === 'immune') {
+					spawnRing(point, '#9fb6dd');
+					floatText(point, '无效', '#9fb6dd');
+				}
+				return;
+			}
+			case 'faint': {
+				faintSide(entry.side);
+				floatText(point, '倒下', '#ff6b6b');
+				return;
+			}
+			case 'status': {
+				spawnBurst(point, '#b48cff', { count: 10 });
+				floatText(point, STATUS_FULL[entry.status] || '异常', '#c9a7ff', true);
+				return;
+			}
+			case 'buff': {
+				spawnBurst(point, '#9be3ff', { count: 8 });
+				floatText(point, '强化', '#9be3ff', true);
+				return;
+			}
+			case 'debuff': {
+				spawnBurst(point, '#d7a3ff', { count: 8 });
+				floatText(point, '弱化', '#d7a3ff', true);
+				return;
+			}
+			case 'switch': {
+				spawnRing(point, '#ffffff');
+				return;
+			}
+			case 'system': {
+				if (entry.weather !== undefined) applyWeatherFx(entry.weather);
+				return;
+			}
+			default:
+				return;
+		}
+	}
+
+	async function playLoop() {
+		playing = true;
+		els.play.textContent = '❚❚';
+		token++;
+		const myToken = token;
+		while (index < beats.length - 1) {
+			const ok = await idle(Math.round(700 * speed), myToken);
+			if (!ok) return;
+			index++;
+			const shown = await showBeat(index, myToken);
+			if (!shown) return;
+			// 停下让观众看清本回合的结果，再进入下一回合
+			const paused = await idle(Math.round(1600 * speed), myToken);
+			if (!paused) return;
+		}
+		playing = false;
+		els.play.textContent = '▶';
+	}
+
+	function stop() {
+		playing = false;
+		token++;
+		stopAudio();
+		els.play.textContent = '▶';
+	}
+
+	function jump(i) {
+		stop();
+		index = Math.max(0, Math.min(beats.length - 1, i));
+		showBeat(index, token, { instant: true });
+		if (index < 0) rebuildLogUpTo(0);
+	}
+
+	const draft = replay.draft || null;
+	const draftEls = {
+		layer: document.getElementById('draft-layer'),
+		pool: document.getElementById('draft-pool'),
+		picksP1: document.getElementById('draft-picks-p1'),
+		picksP2: document.getElementById('draft-picks-p2'),
+		nameP1: document.getElementById('draft-name-p1'),
+		nameP2: document.getElementById('draft-name-p2'),
+		step: document.getElementById('draft-step'),
+		comment: document.getElementById('draft-comment'),
+		skip: document.getElementById('draft-skip'),
+		go: document.getElementById('draft-go'),
+	};
+	let draftIndex = -1;
+	let draftTimer = null;
+	let draftToken = 0;
+	const narration = replay.narration || null;
+	let muted = true;
+	let audioEl = null;
+	let audioResolve = null;
+
+	function playAudio(src) {
+		if (!src || muted) return Promise.resolve();
+		return new Promise(resolve => {
+			if (!audioEl) audioEl = new Audio();
+			const done = () => {
+				if (audioResolve === resolve) audioResolve = null;
+				resolve();
+			};
+			audioResolve = resolve;
+			audioEl.onended = done;
+			audioEl.onerror = done;
+			try {
+				audioEl.pause();
+				audioEl.currentTime = 0;
+				audioEl.src = src;
+				const promise = audioEl.play();
+				if (promise && promise.catch) promise.catch(done);
+			} catch {
+				done();
+			}
+		});
+	}
+
+	function stopAudio() {
+		if (audioEl) {
+			audioEl.pause();
+			audioEl.currentTime = 0;
+		}
+		if (audioResolve) {
+			const resolve = audioResolve;
+			audioResolve = null;
+			resolve();
+		}
+	}
+
+	function setMuted(value) {
+		muted = value;
+		els.mute.textContent = muted ? '静音' : '语音';
+		els.mute.classList.toggle('off', muted);
+		if (muted) stopAudio();
+	}
+
+	// ---------- 背景音乐 ----------
+	let bgm = null;
+	let musicMuted = false;
+	let musicScene = 'battle';
+
+	const MUSIC_SCENES = {
+		draft: {
+			bpm: 96,
+			chords: [[57, 60, 64, 69], [53, 57, 60, 65], [48, 52, 55, 60], [55, 59, 62, 67]],
+			bassGain: 0.045, arpGain: 0.022, bassCutoff: 420, arpCutoff: 1800, volume: 0.06,
+		},
+		battle: {
+			bpm: 152,
+			chords: [[57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 67], [52, 56, 59, 64]],
+			bassGain: 0.085, arpGain: 0.032, bassCutoff: 520, arpCutoff: 2400, volume: 0.08,
+		},
+		victory: {
+			bpm: 108,
+			chords: [[48, 52, 55, 60], [55, 59, 62, 67], [57, 60, 64, 69], [53, 57, 60, 65]],
+			bassGain: 0.05, arpGain: 0.028, bassCutoff: 480, arpCutoff: 2200, volume: 0.07,
+		},
+	};
+
+	function startMusic() {
+		if (bgm) return;
+		if (replay.meta.bgm?.src) {
+			const audio = new Audio(replay.meta.bgm.src);
+			audio.loop = true;
+			audio.volume = 0.22;
+			audio.muted = musicMuted;
+			audio.play().catch(() => {});
+			bgm = { audio };
+			return;
+		}
+		startProceduralMusic();
+	}
+
+	/** 原创 8-bit 循环：BP 舒缓、对战紧张、胜利转大调 */
+	function startProceduralMusic() {
+		const Ctx = window.AudioContext || window.webkitAudioContext;
+		if (!Ctx) return;
+		const ctx = new Ctx();
+		const master = ctx.createGain();
+		const scene = MUSIC_SCENES[musicScene] || MUSIC_SCENES.battle;
+		master.gain.value = 0;
+		master.connect(ctx.destination);
+		master.gain.linearRampToValueAtTime(musicMuted ? 0 : scene.volume, ctx.currentTime + 3);
+
+		const freq = midi => 440 * Math.pow(2, (midi - 69) / 12);
+		const play = (note, time, dur, type, gain, cutoff) => {
+			const osc = ctx.createOscillator();
+			const filter = ctx.createBiquadFilter();
+			const envelope = ctx.createGain();
+			osc.type = type;
+			osc.frequency.value = freq(note);
+			filter.type = 'lowpass';
+			filter.frequency.value = cutoff;
+			osc.connect(filter);
+			filter.connect(envelope);
+			envelope.connect(master);
+			envelope.gain.setValueAtTime(0.0001, time);
+			envelope.gain.linearRampToValueAtTime(gain, time + 0.015);
+			envelope.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+			osc.start(time);
+			osc.stop(time + dur + 0.02);
+		};
+
+		bgm = { ctx, master, scene: musicScene, step: 0, nextTime: ctx.currentTime + 0.2, volume: scene.volume };
+		const tick = () => {
+			const current = MUSIC_SCENES[bgm.scene] || MUSIC_SCENES.battle;
+			const sixteenth = 60 / current.bpm / 4;
+			while (bgm.nextTime < bgm.ctx.currentTime + 0.3) {
+				const bar = Math.floor(bgm.step / 16) % 4;
+				const pos = bgm.step % 16;
+				const chord = current.chords[bar];
+				if (pos % 4 === 0) {
+					play(chord[0] - 24, bgm.nextTime, sixteenth * 5, 'square', current.bassGain, current.bassCutoff);
+				}
+				if (pos % 2 === 0) {
+					play(chord[(pos / 2) % chord.length] + 12, bgm.nextTime, sixteenth * 1.3, 'triangle', current.arpGain, current.arpCutoff);
+				}
+				if (pos === 6 || pos === 14) {
+					play(chord[0] - 12, bgm.nextTime, sixteenth * 2, 'triangle', current.bassGain * 0.45, 900);
+				}
+				bgm.nextTime += sixteenth;
+				bgm.step++;
+			}
+		};
+		tick();
+		bgm.timer = setInterval(tick, 60);
+	}
+
+	function playFanfare() {
+		if (!bgm?.ctx || bgm.audio) return;
+		const ctx = bgm.ctx;
+		const start = ctx.currentTime + 0.05;
+		[72, 76, 79, 84].forEach((note, i) => {
+			const osc = ctx.createOscillator();
+			const gain = ctx.createGain();
+			osc.type = 'triangle';
+			osc.frequency.value = 440 * Math.pow(2, (note - 69) / 12);
+			gain.gain.setValueAtTime(0.0001, start + i * 0.14);
+			gain.gain.linearRampToValueAtTime(0.06, start + i * 0.14 + 0.02);
+			gain.gain.exponentialRampToValueAtTime(0.0001, start + i * 0.14 + 0.5);
+			osc.connect(gain);
+			gain.connect(bgm.master);
+			osc.start(start + i * 0.14);
+			osc.stop(start + i * 0.14 + 0.55);
+		});
+	}
+
+	function setMusicScene(scene, { fanfare = true } = {}) {
+		if (!MUSIC_SCENES[scene] || musicScene === scene) return;
+		musicScene = scene;
+		if (!bgm || bgm.audio) return;
+		bgm.scene = scene;
+		bgm.step = 0;
+		bgm.nextTime = bgm.ctx.currentTime + 0.08;
+		bgm.volume = MUSIC_SCENES[scene].volume;
+		bgm.master.gain.cancelScheduledValues(bgm.ctx.currentTime);
+		bgm.master.gain.linearRampToValueAtTime(musicMuted ? 0 : bgm.volume, bgm.ctx.currentTime + 1.2);
+		if (scene === 'victory' && fanfare) playFanfare();
+	}
+
+	function setMusicMuted(value) {
+		musicMuted = value;
+		els.music.textContent = value ? '音乐关' : '音乐开';
+		els.music.classList.toggle('off', value);
+		if (!bgm) return;
+		if (bgm.audio) {
+			bgm.audio.muted = value;
+		} else if (bgm.master) {
+			if (!value && bgm.ctx.state === 'suspended') bgm.ctx.resume().catch(() => {});
+			bgm.master.gain.cancelScheduledValues(bgm.ctx.currentTime);
+			bgm.master.gain.linearRampToValueAtTime(value ? 0 : bgm.volume, bgm.ctx.currentTime + 0.2);
+		}
+	}
+
+	// 只读状态，方便外部检查语音是否真的在播
+	window.__replayState = {
+		get muted() { return muted; },
+		get audioPlaying() { return Boolean(audioEl && !audioEl.paused && !audioEl.ended); },
+		get audioTime() { return audioEl ? audioEl.currentTime : 0; },
+		get musicMuted() { return musicMuted; },
+		get musicScene() { return musicScene; },
+		get musicPlaying() {
+			return Boolean(bgm && (bgm.audio ? !bgm.audio.paused : bgm.ctx?.state === 'running'));
+		},
+	};
+
+	function renderDraft() {
+		draftEls.nameP1.textContent = players[0].name;
+		draftEls.nameP2.textContent = players[1].name;
+		draftEls.step.textContent = `0 / ${draft.actions.length}`;
+		draftEls.pool.innerHTML = '';
+		for (const mon of draft.pool) {
+			const types = mon.typesZh
+				.map((t, i) => `<span style="background:${TYPE_COLOR[mon.types[i]] || '#8a96ad'}">${escapeHtml(t)}</span>`)
+				.join('');
+			const card = document.createElement('div');
+			card.className = 'pcard';
+			card.dataset.species = mon.species;
+			card.innerHTML = `
+				<img src="${SPRITE_ICON(mon.sprite)}" alt="${escapeHtml(mon.name)}" loading="lazy">
+				<div class="pc-name">${escapeHtml(mon.name)}</div>
+				<div class="pc-types">${types}</div>
+				<div class="pc-sub">Lv.${mon.level}</div>
+				<span class="pc-mark hidden"></span>
+			`;
+			card.querySelector('img').onerror = function () { this.style.visibility = 'hidden'; };
+			draftEls.pool.appendChild(card);
+		}
+		for (const container of [draftEls.picksP1, draftEls.picksP2]) {
+			container.innerHTML = '';
+			for (let i = 0; i < draft.teamSize; i++) {
+				const slot = document.createElement('div');
+				slot.className = 'pslot';
+				container.appendChild(slot);
+			}
+		}
+		draftEls.layer.classList.remove('hidden');
+		setMusicScene('draft');
+		draftTimer = setTimeout(advanceDraft, 1200);
+	}
+
+	function advanceDraft() {
+		draftIndex++;
+		if (draftIndex >= draft.actions.length) {
+			finishDraft();
+			return;
+		}
+		const action = draft.actions[draftIndex];
+		applyDraftAction(action);
+		const myToken = ++draftToken;
+		if (action.speech && !muted) {
+			// 语音念完再进入下一步
+			playAudio(action.speech).then(() => {
+				if (myToken !== draftToken) return;
+				draftTimer = setTimeout(advanceDraft, 500);
+			});
+		} else {
+			draftTimer = setTimeout(advanceDraft, Math.round(2600 * speed));
+		}
+	}
+
+	function applyDraftAction(action) {
+		for (const card of draftEls.pool.querySelectorAll('.pcard.current')) card.classList.remove('current');
+		const card = [...draftEls.pool.children].find(el => el.dataset.species === action.species);
+		const mark = card && card.querySelector('.pc-mark');
+		if (card) {
+			card.classList.add('current');
+			if (action.kind === 'ban') {
+				card.classList.add('banned');
+				mark.textContent = '禁用';
+			} else {
+				card.classList.add(`picked-${action.side}`);
+				mark.textContent = action.side === 'p1' ? 'P1' : 'P2';
+				addDraftPick(action);
+			}
+			mark.classList.remove('hidden');
+		}
+		draftEls.step.textContent = `${draftIndex + 1} / ${draft.actions.length}`;
+		const player = players.find(p => p.id === action.side);
+		draftEls.comment.innerHTML = `
+			<div class="dc-title" style="color:${action.side === 'p1' ? 'var(--p1)' : 'var(--p2)'}">
+				${escapeHtml(player ? player.name : action.side)} · ${escapeHtml(action.label)}
+			</div>
+			<div class="dc-reason">${escapeHtml(action.reason || '')}</div>
+			<div class="dc-thought">${escapeHtml(action.thought || '')}</div>
+		`;
+	}
+
+	function addDraftPick(action) {
+		const container = action.side === 'p1' ? draftEls.picksP1 : draftEls.picksP2;
+		const slot = [...container.children].find(el => !el.classList.contains('filled'));
+		if (!slot) return;
+		slot.classList.add('filled');
+		const img = document.createElement('img');
+		img.src = SPRITE_ICON(action.sprite);
+		img.alt = action.name;
+		img.title = action.name;
+		img.onerror = () => { img.style.visibility = 'hidden'; };
+		slot.appendChild(img);
+	}
+
+	function finishDraft() {
+		clearTimeout(draftTimer);
+		draftEls.step.textContent = `${draft.actions.length} / ${draft.actions.length}`;
+		draftEls.comment.innerHTML = `
+			<div class="dc-title">BP 完成 · 双方阵容已确定</div>
+			<div class="dc-thought">点击「进入对战」开始观看。池中已标记「禁用」的宝可梦本局双方都不能使用。</div>
+		`;
+		draftEls.go.disabled = false;
+	}
+
+	function skipDraft() {
+		clearTimeout(draftTimer);
+		draftToken++;
+		stopAudio();
+		for (let i = draftIndex + 1; i < draft.actions.length; i++) {
+			draftIndex = i;
+			applyDraftAction(draft.actions[i]);
+		}
+		draftIndex = draft.actions.length;
+		finishDraft();
+	}
+
+	function startBattleFromDraft() {
+		clearTimeout(draftTimer);
+		draftToken++;
+		stopAudio();
+		setMusicScene('battle');
+		draftEls.layer.classList.add('hidden');
+		jump(0);
+		playLoop();
+	}
+
+	buildSide('p1');
+	buildSide('p2');
+	rebuildLogUpTo(-1);
+
+	els.play.addEventListener('click', () => {
+		if (playing) stop();
+		else playLoop();
+	});
+	document.getElementById('prev').addEventListener('click', () => jump(index - 1));
+	document.getElementById('next').addEventListener('click', () => jump(index + 1));
+	els.scrub.addEventListener('input', e => jump(Number(e.target.value)));
+	document.getElementById('speed').addEventListener('change', e => { speed = Number(e.target.value); });
+	draftEls.skip.addEventListener('click', skipDraft);
+	draftEls.go.addEventListener('click', startBattleFromDraft);
+	els.mute.addEventListener('click', () => setMuted(!muted));
+	els.music.addEventListener('click', () => setMusicMuted(!musicMuted));
+	document.addEventListener('pointerdown', () => {
+		if (bgm?.ctx?.state === 'suspended') bgm.ctx.resume().catch(() => {});
+	}, { once: true });
+	document.addEventListener('visibilitychange', () => {
+		if (!bgm) return;
+		if (bgm.audio) {
+			if (document.hidden) bgm.audio.pause();
+			else bgm.audio.play().catch(() => {});
+		} else if (bgm.ctx) {
+			if (document.hidden) bgm.ctx.suspend();
+			else bgm.ctx.resume().catch(() => {});
+		}
+	});
+	window.addEventListener('keydown', e => {
+		if (!document.getElementById('start-gate').classList.contains('hidden')) return;
+		if (draft && !draftEls.layer.classList.contains('hidden')) {
+			if (e.code === 'Space') { e.preventDefault(); skipDraft(); }
+			if (e.code === 'Enter' && !draftEls.go.disabled) startBattleFromDraft();
+			return;
+		}
+		if (e.code === 'Space') { e.preventDefault(); if (playing) stop(); else playLoop(); }
+		if (e.code === 'ArrowRight') jump(index + 1);
+		if (e.code === 'ArrowLeft') jump(index - 1);
+	});
+
+	index = -1;
+	jump(0);
+	els.play.textContent = '▶';
+
+	function beginPlayback(startMuted) {
+		setMuted(startMuted);
+		setMusicMuted(startMuted);
+		startMusic();
+		document.getElementById('start-gate').classList.add('hidden');
+		if (draft) {
+			renderDraft();
+		} else if (beats.length > 1) {
+			setTimeout(() => { if (!playing) playLoop(); }, 600);
+		}
+	}
+
+	if (narration?.enabled) {
+		document.getElementById('start-gate').classList.remove('hidden');
+		document.getElementById('start-voice').addEventListener('click', () => beginPlayback(false));
+		document.getElementById('start-mute').addEventListener('click', () => beginPlayback(true));
+	} else {
+		beginPlayback(true);
+	}
+
+	function escapeHtml(text) {
+		return String(text ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+	}
+})();
+</script>
+</body>
+</html>
